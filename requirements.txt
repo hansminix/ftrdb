@@ -1,0 +1,5 @@
+flask-sqlalchemy
+flask-admin
+email_validator
+mysqlclient
+WTForms-Alchemy
