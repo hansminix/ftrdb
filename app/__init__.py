@@ -5,7 +5,7 @@ from logging.config import fileConfig
 from flask_admin.contrib.sqla import ModelView
 from sqlalchemy.orm import configure_mappers
 from .extensions import db, admin
-from .models import ownerview,owner,environment,environmentview,firewall, firewallview, datapath,datapathview
+from .models import ownerview,owner,environment,environmentview,firewall, firewallview, datapath,datapathview, datapath_firewall, datapath_firewallview
 from .index import index
 
 #Get logging configuration
@@ -27,6 +27,7 @@ def create_app():
     admin.add_view(environmentview(environment,db.session, name='Netwerk omgevingen'))
     admin.add_view(firewallview(firewall,db.session,name="Firewalls"))
     admin.add_view(datapathview(datapath,db.session,name="Data paden"))
+    admin.add_view(datapath_firewallview(datapath_firewall,db.session,name="Datapad Firewalls"))
     logger.debug("Application started")
     return app
 

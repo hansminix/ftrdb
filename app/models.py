@@ -4,83 +4,68 @@ from flask_admin.contrib.sqla import ModelView
 from .config import Config
 from sqlalchemy.sql import func
 from wtforms.validators import Email, Regexp, DataRequired
-from wtforms_alchemy import Unique
-from wtforms import SelectField
+#from wtforms_alchemy import Unique
+from wtforms import SelectField, StringField
 from datetime import datetime
 from .config import Config
 import itertools
 
 class owner(db.Model):
     __table_name__ = 'owner'
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     name = db.Column(db.String(255),nullable=False)
-    emailaddress = db.Column(db.String(255),nullable=False)
+    emailaddress = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
-    firewall=db.relationship('firewall', back_populates='owner')
 
     def __repr__(self):
         return self.name 
 
 class environment(db.Model): 
     __table_name__ = 'environment'
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     name = db.Column(db.String(255),nullable=False)
     description = db.Column(db.Text)
-    #source=db.relationship('datapath', back_populates='source')
-    #destination=db.relationship('datapath', back_populates='destination')
 
     def __repr__(self):
         return self.name
 
-class environmentchoices():
-    def get_enviroments(self):
-        engine = sqldb.create_engine(Config.SQLALCHEMY_DATABASE_URI)
-        meta_data = sqldb.MetaData()
-        meta_data.reflect(bind=engine)
-        sql = sqldb.text("SELECT name from environment order by name")
-        with engine.connect() as conn:
-            result = conn.execute(sql).fetchall()
-        choices = list(itertools.chain(*result))
-        return choices
-
 class firewall(db.Model):
     __table_name__ = 'firewall'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(255),nullable=False)
-    description = db.Column(db.Text)
-    owner_id= db.Column(db.Integer,db.ForeignKey(owner.id))
-    owner=db.relationship("owner", back_populates="firewall")
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name = db.Column(db.String(100), nullable=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey('owner.id'), nullable=False)  # Relatie naar owner
+    description = db.Column(db.Text, nullable=True)
+    owner = db.relationship('owner', backref=db.backref('firewalls', lazy=True))  # Relatie naar Owner
 
     def __repr__(self):
         return self.name
 
 class datapath(db.Model):
     __table_name__ = 'datapath'
-    id = db.Column(db.Integer, primary_key=True)
-    #source_id=db.Column(db.Integer,db.ForeignKey(environment.id), foreign_keys=[environment.id])
-    #source = db.relationship("environment", back_populates="source")
-    #destination_id=db.Column(db.Integer,db.ForeignKey(environment.id), foreign_keys=[environment.id])
-    #destination = db.relationship("environment", back_populates="destination")
-    source = db.Column(db.String(255),nullable=False)
-    destination = db.Column(db.String(255),nullable=False)
-    firewalls=db.relationship("datapath_firewall", back_populates="datapath")
-
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    source_id = db.Column(db.Integer, db.ForeignKey('environment.id'), nullable=False)  # Relatie naar environment
+    destination_id = db.Column(db.Integer, db.ForeignKey('environment.id'), nullable=False)  # Relatie naar environment
+    source = db.relationship('environment', foreign_keys=[source_id], backref=db.backref('source_datapaths', lazy=True))
+    destination = db.relationship('environment', foreign_keys=[destination_id], backref=db.backref('destination_datapaths', lazy=True))
+    name = db.Column(db.String(100))
+    
     def __repr__(self):
-        return f"{self.source}_{self.destination}"
+        return f"{self.name}"
 
 class datapath_firewall(db.Model):
     __table_name__ = 'datapath_firewall'
-    id = db.Column(db.Integer, primary_key=True)
-    datapath_id=db.Column(db.Integer,db.ForeignKey(datapath.id))
-    datapath=db.relationship("datapath", back_populates="firewalls")
-    firewall_id=db.Column(db.Integer,db.ForeignKey(firewall.id))
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    datapath_id = db.Column(db.Integer, db.ForeignKey('datapath.id'), nullable=False)  # Relatie naar datapath
+    firewall_id = db.Column(db.Integer, db.ForeignKey('firewall.id'), nullable=False)  # Relatie naar firewall
+    datapath = db.relationship('datapath', backref=db.backref('datapath_firewalls', lazy=True))
+    firewall = db.relationship('firewall', backref=db.backref('datapath_firewalls', lazy=True))
 
 class ownerview(ModelView):
     can_export = True
     form_columns = ['name', 'emailaddress','description']
     column_labels = dict(name='Naam',emailaddress='Mailadres',description='Omschrijving')
     form_args = {
-        'name': { 'label': 'Naam','validators': [Unique(owner.name, message='Naam bestaat al')] },
+        'name': { 'label': 'Naam' },
         'emailaddress': { 'label' : 'Mailadres','validators': [Email(message='Geen geldig mail adres')] },
         'description': { 'label': 'Omschrijving'}
         }
@@ -96,26 +81,34 @@ class firewallview(ModelView):
         }
 
 class datapathview(ModelView):
-    ev=environmentchoices()
-    env_choices=ev.get_enviroments()
-    ev=None
-    print(env_choices)
-    #env_choices=[]
     can_export = True
-    form_columns = ['source','destination','firewalls']
-    column_labels = dict(source='Bronomgeving',destination='Doelomgeving',firewalls='Firewalls')
-    form_extra_fields = {
-        'source': SelectField(
-            'Source',
-            choices=env_choices
-            ),
-        'destination': SelectField(
-            'Destination',
-            choices=env_choices
-            )
-    }
+    form_columns = ['name','source','destination']
+    column_labels = dict(source='Bronomgeving',destination='Doelomgeving')
+    column_filters = ('name',)
     form_args = {
-        'firewalls': { 'label': 'Firewalls'}
+        'source' : { 'label': 'Bronomgeving'},
+        'destination' : { 'label': 'Doelomgeving'},
+        }
+    form_extra_fields = {
+        'name': StringField('Naam')
+    }
+    form_widget_args = {
+        'name':{
+            'readonly':True
+        }
+    }
+    
+    def on_model_change(self, form, model, is_created):
+        model.name = f"{form.data.get('source', None)} - to - {form.data.get('destination', None)}"
+
+class datapath_firewallview(ModelView):
+    can_export = True
+    form_columns = ['datapath','firewall']
+    column_labels = dict(datapath='Datapad',firewall='Firewall')
+    column_filters = ('datapath',)
+    form_args = {
+        'datapath' : { 'label': 'Datapad'},
+        'firewall' : { 'label': 'Firewall'},
         }
 
 class environmentview(ModelView):
@@ -123,6 +116,6 @@ class environmentview(ModelView):
     form_columns = ['name', 'description']
     column_labels = dict(name='Netwerk omgeving',description='Omschrijving')
     form_args = {
-        'name': { 'label': 'Naam', 'validators': [Regexp('^[0-9a-zA-Z_]+$',message='Alleen letters, cijfers en _ toegestaan'),Unique(environment.name, message='Netwerkomgeving bestaat al')] },
+        'name': { 'label': 'Naam', 'validators': [Regexp('^[0-9a-zA-Z_]+$',message='Alleen letters, cijfers en _ toegestaan')]},
         'description': { 'label': 'Omschrijving'}
         }
